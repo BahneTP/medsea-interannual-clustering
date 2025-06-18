@@ -191,50 +191,6 @@ def plot_cluster_map(z_stack, labels):
     plt.tight_layout()
     plt.show()
 
-def plot_multiple_reconstructions(device, X, model, z_stack, indices, title_prefix="Sample"):
-    """
-    X: numpy array of shape (n_samples, n_features)
-    model: trained autoencoder
-    z_stack: xarray with dims ("time", "location")
-    indices: list of time indices to plot (e.g., [0, 1, 2])
-    """
-
-    n = len(indices)
-    fig, axes = plt.subplots(n, 2, figsize=(10, 4 * n), subplot_kw={'projection': ccrs.Mercator()})
-    if n == 1:
-        axes = np.expand_dims(axes, axis=0)
-
-    for i, t_idx in enumerate(indices):
-        original_vector = X[t_idx]
-        with torch.no_grad():
-            reconstructed_vector = model(torch.tensor(original_vector).float().to(device)).cpu().numpy()
-
-        def to_map(vec):
-            da = xr.DataArray(vec, coords={"location": z_stack.location}, dims=["location"])
-            return da.unstack("location")
-
-        original_map = to_map(original_vector)
-        reco_map = to_map(reconstructed_vector)
-
-        for ax, data, title in zip(axes[i], [original_map, reco_map], ["Original", "Reconstruction"]):
-            im = data.plot.pcolormesh(
-                ax=ax,
-                transform=ccrs.PlateCarree(),
-                cmap="coolwarm",
-                add_colorbar=False
-            )
-            ax.coastlines()
-            ax.set_title(f"{title_prefix} {t_idx}: {title}")
-            ax.set_xticks([])
-            ax.set_yticks([])
-
-    # Gemeinsame Farbskala
-    cbar_ax = fig.add_axes([0.25, 0.05, 0.5, 0.02])
-    fig.colorbar(im, cax=cbar_ax, orientation="horizontal", label="Z-score")
-
-    plt.tight_layout()
-    plt.show()
-
 
 def reconstructed_to_stack(ds, feature: str, depth: float, ae_recons: list):
     """
