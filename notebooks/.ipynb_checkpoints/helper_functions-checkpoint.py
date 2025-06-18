@@ -5,7 +5,43 @@ import cartopy.feature as cfeature
 import matplotlib.dates as mdates
 import torch
 import xarray as xr
+from sklearn.cluster import KMeans
 
+def preprocessing(ds, features: list, depths: list, dim):
+    """
+    ds: Dataset in form of an xarray object.
+    feature: List of features to combine. "sol" for Salinity or "temperature for Temperature.
+    depth: "Any value from 0 to 1062, but it will assign the closest existing."
+
+    returns a stacked array of the "feature".
+    """
+
+    def standardize(group):
+        m = group.mean("time")
+        s = group.std("time")
+        return (group - m) / s
+
+    feature_vectors = []
+    for feature in features:
+
+        for depth in depths:
+            data = ds[feature].sel(depth=depth, method="nearest")
+            data = data.assign_coords(month=data["time"].dt.month)
+        
+            z = data.groupby("month").apply(standardize)
+            z = z.stack(location=("latitude", "longitude"))
+            feature_vectors.append(z)
+    
+    z_concat = xr.concat(feature_vectors, dim=dim)
+    z_concat = z_concat.dropna(dim="location", how="any")
+
+    return z_concat  # → xarray.DataArray mit dims: ("time", "location")
+
+def apply_kmeans(X, k: int):
+    """Simply applies the k-means algorithm with "k" clusters."""
+
+    kmeans = KMeans(n_clusters=k, n_init="auto", random_state=0)
+    return kmeans.fit_predict(X)
 
 def plot_cluster_timeline(z, labels):
     """
@@ -117,7 +153,43 @@ def plot_average_cluster(z, labels, cmin = None, cmax = None):
     plt.show()
 
 
+def plot_cluster_map(z_stack, labels):
+    """
+    z_stack: stacked feature array.
+    labels: output from k-means.
 
+    Plots a map which shows the clusters regions.
+    """
+    
+    cluster_da = xr.DataArray(labels, coords=[z_stack.location], dims=["location"])
+    cluster_map = cluster_da.unstack("location")
+
+    # Plotting
+    lat = cluster_map.latitude
+    lon = cluster_map.longitude
+
+    fig = plt.figure(figsize=(7, 6))
+    ax = plt.axes(projection=ccrs.Mercator())
+
+    mesh = ax.pcolormesh(
+        lon, lat, cluster_map.values,
+        cmap="tab10",
+        transform=ccrs.PlateCarree()
+    )
+
+    ax.coastlines()
+    ax.gridlines(draw_labels=True)
+
+    # Legend
+    for cluster_id in np.unique(labels):
+        plt.scatter([], [], c=[plt.cm.tab10(cluster_id)], label=f"Cluster {cluster_id}")
+    plt.legend(
+        title="",
+        loc="lower left",
+        bbox_to_anchor=(0.15, -0.02))
+
+    plt.tight_layout()
+    plt.show()
 
 def plot_multiple_reconstructions(device, X, model, z_stack, indices, title_prefix="Sample"):
     """
@@ -126,6 +198,7 @@ def plot_multiple_reconstructions(device, X, model, z_stack, indices, title_pref
     z_stack: xarray with dims ("time", "location")
     indices: list of time indices to plot (e.g., [0, 1, 2])
     """
+
     n = len(indices)
     fig, axes = plt.subplots(n, 2, figsize=(10, 4 * n), subplot_kw={'projection': ccrs.Mercator()})
     if n == 1:
@@ -162,3 +235,74 @@ def plot_multiple_reconstructions(device, X, model, z_stack, indices, title_pref
     plt.tight_layout()
     plt.show()
 
+
+def reconstructed_to_stack(ds, feature: str, depth: float, ae_recons: list):
+    """
+    ds: Xarray object.
+    feature: Either "thetao" for Temperature or "so" for Salinity.
+    depth: int.
+    ae_recons: List of the autoencoders reconstructions.
+    
+    Builds an xarray DataArray with dimensions ("time", "location") for a given feature and depth,
+    based on a list of Autoencoder reconstructions.
+    """
+
+    # Size of the features and depths in the reconstruction-vector.
+    sizes = {
+        "thetao": {
+            47.37: 40657,
+            318.13: 31973,
+            1062.44: 24517,
+        },
+        "so": {
+            47.37: 40657,
+            318.13: 31973,
+            1062.44: 24517,
+        }
+    }
+
+    # Set depth.
+    depth = ds[feature].sel(depth=depth, method="nearest").depth.values.item()
+    depth = round(depth, 2)
+
+
+    # Calculate Indices.
+    def compute_start_index(feature, depth):
+        order = [("thetao", 47.37), ("thetao", 318.13), ("thetao", 1062.44),
+                 ("so", 47.37), ("so", 318.13), ("so", 1062.44)]
+        start = 0
+        for f, d in order:
+            if f == feature and d == depth:
+                return start
+            start += sizes[f][d]
+        raise ValueError(f"Feature {feature} with {depth} not found.")
+
+    start_idx = compute_start_index(feature, depth)
+    n_points = sizes[feature][depth]
+
+    # Ensure the shape of the reconstructions is correct.
+    for recon in ae_recons:
+        if recon.shape[0] < start_idx + n_points:
+            raise ValueError(f"One reconstruction-vector is too short for startindex + length.")
+
+    # Build array: time × location
+    recon_values = [recon[start_idx:start_idx + n_points] for recon in ae_recons]
+    recon_array = np.stack(recon_values, axis=0)  # → shape: (time, location)
+
+    # Geet coordinates.
+    base = ds[feature].sel(depth=depth, method="nearest")
+    base = base.stack(location=("latitude", "longitude"))
+    base = base.dropna(dim="location", how="any")
+    coords = base["location"]
+
+    # Extracting the Time-Coordinate out of the dataframe.
+    time_coords = ds["time"]
+
+    # Building the DataArray.
+    out = xr.DataArray(
+        data=recon_array,
+        dims=("time", "location"),
+        coords={"time": time_coords, "location": coords}
+    )
+
+    return out
