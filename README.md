@@ -33,7 +33,8 @@ Input:
 ## Acknowledgements
 
 This work was carried out in collaboration with the **University of Split** as part of a research internship, with support from  
-Frano Matić (Department of Marine Studies) and Hrvoje Kalinić (Department of Informatics).
+Frano Matić (Department of Marine Studies) and 
+Hrvoje Kalinić (Department of Informatics).
 
 ## License
 
