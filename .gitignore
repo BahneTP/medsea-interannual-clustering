@@ -1,2 +1,5 @@
 /notebooks/marine-env/
 /data/
+
+*.pth
+
