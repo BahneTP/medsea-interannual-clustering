@@ -170,7 +170,7 @@ def plot_cluster_timeline(z, labels):
 
 
 
-def plot_average_cluster(z, labels, cmin = None, cmax = None):
+def plot_average_cluster(z, labels, cmin = None, cmax = None, ncols=3):
     """
     z: stacked feature vector.
     labels: Output of K-Means.
@@ -201,7 +201,7 @@ def plot_average_cluster(z, labels, cmin = None, cmax = None):
     
     # Grid layout
     n_clusters = len(cluster_maps_ordered)
-    ncols = 3
+    # ncols = 3
     nrows = int(np.ceil(n_clusters / ncols))
     fig, axes = plt.subplots(nrows, ncols, figsize=(2.5 * ncols, 1.5 * nrows),
                              subplot_kw={'projection': ccrs.Mercator()})
@@ -464,7 +464,7 @@ def plot_reconstruction_comparison(z_stack_original: xr.DataArray,
     plt.show()
 
 
-def plot_average_loss_map_from_data(original_z, reconstructed_z, labels, cmin=None, cmax=None):
+def plot_average_loss_map_from_data(original_z, reconstructed_z, labels, cmin=None, cmax=None, ncols=3):
     """
     Plots average MSE loss maps per cluster.
 
@@ -495,7 +495,7 @@ def plot_average_loss_map_from_data(original_z, reconstructed_z, labels, cmin=No
 
     # Layout
     n_clusters = len(cluster_maps_ordered)
-    ncols = 3
+    # ncols = 3
     nrows = int(np.ceil(n_clusters / ncols))
     fig, axes = plt.subplots(nrows, ncols, figsize=(2.5 * ncols, 1.5 * nrows),
                              subplot_kw={'projection': ccrs.Mercator()})
