@@ -1,0 +1,6 @@
+cartopy
+xarray
+matplotlib
+netCDF4
+torch
+torchinfo

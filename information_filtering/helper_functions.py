@@ -46,9 +46,6 @@ def preprocessing(ds, features: list, depths: list, dim: str, trend_removal: boo
         m = group.mean("time")
         s = group.std("time")
         return (group - m) / s
-        
-    # Only masking the atlantic.
-    # mask = ~((lon2d < 0) & (lat2d > 41))
 
     lon2d, lat2d = xr.broadcast(ds.longitude, ds.latitude)
     atlantic_mask = ~((lon2d < 0) & (lat2d > 41))
@@ -69,14 +66,12 @@ def preprocessing(ds, features: list, depths: list, dim: str, trend_removal: boo
                 trend = xr.polyval(coord=data['time'], coeffs=fit.polyfit_coefficients)
                 data = data - trend
             
-            # Monat zuweisen für Gruppierung
             data = data.assign_coords(month=data["time"].dt.month)
     
-            # Standardisierung
+            # Calculate the z-scores
             z = data.groupby("month").apply(standardize)
             z = z.stack(location=("latitude", "longitude"))
             feature_vectors.append(z)
-
     
     z_concat = xr.concat(feature_vectors, dim=dim)
     z_concat = z_concat.dropna(dim="location", how="any")
@@ -123,7 +118,7 @@ def preprocessing_conv(ds, features: list, depths: list, trend_removal: bool, in
                 masks.append(nan_mask)
 
             except Exception as e:
-                print(f"⚠️ Skipping {feature}@{depth}m: {e}")
+                print(f"Skipping {feature}@{depth}m: {e}")
                 continue
 
     z_all = xr.concat(channels, dim="channel").transpose("time", "channel", "latitude", "longitude")
@@ -346,14 +341,14 @@ def reconstructed_to_stack(ds, feature: str, depth: float, ae_recons: list, coor
     # Size of the features and depths in the reconstruction-vector.
     sizes = {
         "thetao": {
-            47.37: 34974,
-            318.13: 27736,
-            1062.44: 20811,
+            51.38: 35111,
+            303.56: 28773,
+            1005.14: 22228,
         },
         "so": {
-            47.37: 34974,
-            318.13: 27736,
-            1062.44: 20811,
+            51.38: 35111,
+            303.56: 28773,
+            1005.14: 22228,
         }
     }
 
@@ -364,8 +359,8 @@ def reconstructed_to_stack(ds, feature: str, depth: float, ae_recons: list, coor
 
     # Calculate Indices.
     def compute_start_index(feature, depth):
-        order = [("thetao", 47.37), ("thetao", 318.13), ("thetao", 1062.44),
-                 ("so", 47.37), ("so", 318.13), ("so", 1062.44)]
+        order = [("thetao", 51.38), ("thetao", 303.56), ("thetao", 1005.14),
+                 ("so", 51.38), ("so", 303.56), ("so", 1005.14)]
         start = 0
         for f, d in order:
             if f == feature and d == depth:
@@ -535,7 +530,7 @@ def plot_average_loss_map_from_data(original_z, reconstructed_z, labels, cmin=No
     fig.subplots_adjust(wspace=0.05, hspace=0.05, left=0, right=1, top=0.98, bottom=0.12)
     plt.show()
 
-def get_latents_and_cluster(model, X, k=9, batch_size=512, device="cpu"):
+def get_latents_and_cluster(model, X, k=9, batch_size=512, device="cpu", network_type="VAE"):
     """
     Computes the latent means (mu) for all inputs and clusters them using KMeans.
     """
@@ -551,14 +546,23 @@ def get_latents_and_cluster(model, X, k=9, batch_size=512, device="cpu"):
     X_tensor = X_tensor.to(device)
     latents = []
 
-    with torch.no_grad():
-        for i in range(0, len(X_tensor), batch_size):
-            batch = X_tensor[i:i+batch_size]
-            
-            # Dein VAE Encoder-Forward
-            h = model.encoder(batch)
-            mu = model.fc_mean(h)
-            latents.append(mu.cpu())
+    if network_type == "VAE":
+        print("VAE")
+        with torch.no_grad():
+            for i in range(0, len(X_tensor), batch_size):
+                batch = X_tensor[i:i+batch_size]
+                
+                # Dein VAE Encoder-Forward
+                h = model.encoder(batch)
+                mu = model.fc_mean(h)
+                latents.append(mu.cpu())
+    else:
+        print("VCAE")
+        with torch.no_grad():
+            for i in range(0, len(X_tensor), batch_size):
+                batch = X_tensor[i:i+batch_size]
+                _, mu, _ = model(batch)
+                latents.append(mu.cpu())
 
     latents = torch.cat(latents, dim=0)  # (n_samples, latent_dim)
 

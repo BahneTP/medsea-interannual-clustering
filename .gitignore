@@ -1,5 +1,5 @@
 /notebooks/marine-env/
-/data/
-
+/information_filtering/data/
+push
 *.pth
-
+*.nc
