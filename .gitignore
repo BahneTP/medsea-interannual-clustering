@@ -3,3 +3,4 @@
 push
 *.pth
 *.nc
+information_filtering/data/medsea1987to2025_val.nc
