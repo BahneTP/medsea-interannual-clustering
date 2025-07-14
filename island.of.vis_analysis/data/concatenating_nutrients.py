@@ -11,7 +11,7 @@ def combine(path):
             try:
                 ds = xr.open_dataset(file_path)
 
-                # Rundung der depth-Koordinate
+                # Ensure that the depths from both datasets are the same.
                 if 'depth' in ds.coords:
                     ds = ds.assign_coords(depth=ds['depth'].round(2))
                 elif 'depth' in ds.dims:
@@ -19,7 +19,7 @@ def combine(path):
                 else:
                     print(f"Warning: No depth coord in {filename}")
 
-                print(ds.depth)  # kontrolliere
+                print(ds.depth)
                 
                 datasets.append(ds)
 
@@ -30,6 +30,7 @@ def combine(path):
 
 
 ds = combine("nutrients")
+ds = ds.sel(time=slice("1998-01-01", None))
 print(ds)
 print(ds.po4.depth)
 

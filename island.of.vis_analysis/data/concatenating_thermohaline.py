@@ -1,12 +1,6 @@
 import os
 import xarray as xr
 
-#Data coordinates:
-#N: 43,05341450446393 
-#E: 16,09672139235972
-#S: 42,944924514229555
-#W: 15,987544756617531
-
 def combine(path):
     datasets = []
     folder_path = os.path.abspath(path)
@@ -17,10 +11,6 @@ def combine(path):
             try:
                 ds = xr.open_dataset(file_path)
 
-                # Delete bottomT if existing.
-                if "bottomT" in ds:
-                    ds = ds.drop_vars("bottomT")
-
                 datasets.append(ds)
 
             except Exception as e:
@@ -29,13 +19,18 @@ def combine(path):
 
 # Now merging.
 reanalysis = combine("thermohaline/reanalysis")
-reanalysis = reanalysis.sel(time=slice(None, "2022-12-31"))
-print(reanalysis.thetao.values.shape)
+reanalysis = reanalysis.sel(time=slice(None, "2023-05-31"))
+print(reanalysis.dims)
 
 forecasting = combine("thermohaline/forecasting")
-print(forecasting.thetao.values.shape)
+forecasting = forecasting.sel(time=slice("2023-06-01", None))
+print(forecasting.dims)
 
 combined = xr.concat([reanalysis, forecasting], dim="time", combine_attrs="override")
+combined = combined.sel(time=slice("1998-01-01", "2025-04-30"))
+combined = combined.where(combined['depth'] <= 95, drop=True)
+
+print(combined.time)
 print(combined.thetao.values.shape)
 
 
@@ -47,4 +42,4 @@ for var in combined.data_vars:
         del v.encoding['missing_value']
     v.attrs['missing_value'] = 1.0e+20  # optional, CF-Doku
 
-combined.to_netcdf("combined.nc", format="NETCDF4")
+combined.to_netcdf("combined_thermohaline.nc", format="NETCDF4")

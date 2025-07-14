@@ -5,30 +5,147 @@ import scipy.ndimage
 import matplotlib.colors as mcolors
 import matplotlib.ticker as mticker
 
-def plot_anomalies(ds, feature: str, cmin, cmax, title):
 
-    hov = ds[feature]  # Dimensions: time, depth, lat, lon
+# def plot_anomalies(ds, feature: str, cmin, cmax, title, depths_to_plot):
+#     import matplotlib.pyplot as plt
 
-    dayofyear = hov['time'].dt.dayofyear
-    climatology = hov.groupby(dayofyear).mean(dim='time')
-    anomaly = hov.groupby(dayofyear) - climatology
+#     hov = ds[feature]
+#     hov_mean = hov.mean(dim=['latitude', 'longitude'])
 
-    plt.figure(figsize=(8, 5))
-    p = anomaly.plot(
+#     dayofyear = hov_mean['time'].dt.dayofyear
+#     climatology = hov_mean.groupby(dayofyear).mean(dim='time')
+#     climatology_std = hov_mean.groupby(dayofyear).std(dim='time')
+
+#     clim = climatology.sel(dayofyear=dayofyear)
+#     std = climatology_std.sel(dayofyear=dayofyear)
+#     anomaly = (hov_mean - clim) / std
+
+#     fig, ax = plt.subplots(figsize=(8, 5))
+
+#     p = anomaly.plot(
+#         ax=ax,
+#         x='time',
+#         y='depth',
+#         cmap='coolwarm',
+#         yincrease=False,
+#         vmin=cmin,
+#         vmax=cmax,
+#         add_colorbar=False
+#     )
+
+#     fig.subplots_adjust(bottom=0.18)
+#     cax = fig.add_axes([0.25, 0.05, 0.5, 0.02])
+#     cbar = fig.colorbar(p, cax=cax, orientation="horizontal", pad=0.2)
+#     cbar.set_label(title, fontsize=12)
+
+#     ax.set_xlabel('Year', fontsize=12)
+#     ax.set_ylabel('Depth (m)', fontsize=12)
+
+#     ax2 = ax.twinx()
+
+#     for depth in depths_to_plot:
+
+#         profile_anom = anomaly.sel(depth=depth, method='nearest')
+#         profile_smooth = profile_anom.rolling(time=365, center=True).mean()
+
+#         ax2.plot(
+#             profile_smooth['time'],
+#             profile_smooth,
+#             label=f'{depth:.1f} m',
+#             color='black',
+#             linewidth=1.2
+#         )
+#         ax2.set_ylim(-2, 2)
+
+#     ax2.legend(loc='upper right')
+
+#     plt.title('')
+#     plt.show()
+
+
+def plot_anomalies(ds, feature: str, cmin, cmax, title, depths_to_plot, smoothing_factor, mld, feature_graphs):
+    import matplotlib.pyplot as plt
+
+    anomalys = []
+    for feature in [feature] + [x for x,_ in feature_graphs]:
+
+        hov = ds[feature]
+        hov_mean = hov.mean(dim=['latitude', 'longitude'])
+
+        dayofyear = hov_mean['time'].dt.dayofyear
+        climatology = hov_mean.groupby(dayofyear).mean(dim='time')
+        climatology_std = hov_mean.groupby(dayofyear).std(dim='time')
+
+        clim = climatology.sel(dayofyear=dayofyear)
+        std = climatology_std.sel(dayofyear=dayofyear)
+        anomaly = (hov_mean - clim) / std
+        anomalys.append(anomaly)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    p = anomalys[0].plot(
+        ax=ax,
         x='time',
         y='depth',
         cmap='coolwarm',
-        yincrease=False,        # Depth decreasing.
+        yincrease=False,
         vmin=cmin,
-        vmax=cmax
+        vmax=cmax,
+        add_colorbar=False
     )
+    if mld:
+        
+        mld = ds["mlotst"].mean(dim=['latitude', 'longitude']).sel(depth=75, method='nearest')
+        f_smooth = mld.rolling(time=smoothing_factor, center=True).mean()
 
-    p.colorbar.set_label(title, fontsize=12)
+
+        ax.plot(
+            f_smooth['time'],
+            f_smooth,
+            label="Mixed Layer Depth",
+            color="Brown",
+            linewidth=1.4
+        )
+        ax.legend(loc='upper left')
+    
+
+    fig.subplots_adjust(bottom=0.18)
+    cax = fig.add_axes([0.25, 0.05, 0.5, 0.02])
+    cbar = fig.colorbar(p, cax=cax, orientation="horizontal", pad=0.2)
+    cbar.set_label(title, fontsize=12)
+
+    ax.set_xlabel('Year', fontsize=12)
+    ax.set_ylabel('Depth (m)', fontsize=12)
+
+    ax2 = ax.twinx()
+
+    # Colormap wählen, etwa 'tab10' für maximal 10 gut unterscheidbare Farben
+    cmap = plt.get_cmap('tab10')
+    colors = [cmap(i % 10) for i in range(len(feature_graphs))]
+    if len(feature_graphs) * len(depths_to_plot) == 2:
+        colors = ["black", (0.3,0.3,0.3)]
+    if len(feature_graphs) * len(depths_to_plot) == 1:
+        colors = ["black"]
+
+    for i, feature in enumerate([x for x, _ in feature_graphs]):
+        for j, depth in enumerate(depths_to_plot):
+            profile_anom = anomalys[i+1].sel(depth=depth, method='nearest')
+            profile_smooth = profile_anom.rolling(time=smoothing_factor, center=True).mean()
+
+            ax2.plot(
+                profile_smooth['time'],
+                profile_smooth,
+                label=f'{feature_graphs[i][1]} ({depth:.1f} m)',
+                color=colors[(i)*(j+i)],
+                linewidth=1.4
+            )
+            ax2.set_ylim(-2, 2)
+
+        ax2.legend(loc='upper right')
 
     plt.title('')
-    plt.xlabel('Year', fontsize=12)
-    plt.ylabel('Depth (m)', fontsize=12)
     plt.show()
+
 
 
 def plot_hovmoeller(ds, var_name, title, year, contour_levels, mean_space=True, sigma=1.0, anomaly=False, cmin=-1, cmax=-1):
@@ -228,17 +345,22 @@ def plot_hovmoeller_grid(
 
 
 
-def plot_variables_overyear(data, title: str, ylabel: str, anomaly=False):
+def plot_variables_overyear(mlotst, title: str, ylabel: str, anomaly=False):
 
     fig, ax = plt.subplots(figsize=(8, 4))
     
     if anomaly:
         doy = mlotst['time'].dt.dayofyear
         mean_doy = mlotst.groupby(doy).mean(dim='time')
-        anomalies = mlotst.groupby(doy) - mean_doy
-        ax.plot(data['time'], anomalies)
+        std_doy = mlotst.groupby(doy).std(dim='time')
+
+        mean_for_time = mean_doy.sel(dayofyear=doy)
+        std_for_time = std_doy.sel(dayofyear=doy)
+
+        anomalies = (mlotst - mean_for_time) / std_for_time
+        ax.plot(mlotst['time'], anomalies)
     else:
-        ax.plot(data['time'], data)
+        ax.plot(mlotst['time'], mlotst)
 
     # ax.set_title(title)
     ax.set_xlabel('Year')
