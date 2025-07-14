@@ -136,7 +136,7 @@ def plot_anomalies(ds, feature: str, cmin, cmax, title, depths_to_plot, smoothin
                 profile_smooth['time'],
                 profile_smooth,
                 label=f'{feature_graphs[i][1]} ({depth:.1f} m)',
-                color=colors[(i)*(j+i)],
+                color=colors[(i+j)],
                 linewidth=1.4
             )
             ax2.set_ylim(-2, 2)
@@ -144,6 +144,7 @@ def plot_anomalies(ds, feature: str, cmin, cmax, title, depths_to_plot, smoothin
         ax2.legend(loc='upper right')
 
     plt.title('')
+    plt.savefig(title[:-9]+".tiff", dpi=600, format="tiff", pil_kwargs={"compression": "tiff_lzw"}, bbox_inches="tight")
     plt.show()
 
 
